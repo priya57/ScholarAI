@@ -10,9 +10,11 @@ from ..core.config import settings
 from ..core.document_processor import DocumentProcessor
 from ..core.vector_store import VectorStoreManager
 from ..core.rag_engine import RAGEngine
+from ..core.mock_test_engine import MockTestEngine
 from ..models.schemas import (
     QueryRequest, QueryResponse, DocumentUploadResponse, 
-    HealthResponse, SearchRequest, SearchResponse, FilteredQueryRequest, FiltersResponse
+    HealthResponse, SearchRequest, SearchResponse, FilteredQueryRequest, FiltersResponse,
+    TestGenerateRequest, TestSubmitRequest, TestResult, MobileQueryRequest
 )
 
 # Initialize FastAPI app
@@ -35,11 +37,12 @@ app.add_middleware(
 vector_store_manager = None
 rag_engine = None
 document_processor = None
+mock_test_engine = None
 
 @app.on_event("startup")
 async def startup_event():
     """Initialize components on startup"""
-    global vector_store_manager, rag_engine, document_processor
+    global vector_store_manager, rag_engine, document_processor, mock_test_engine
     
     # Initialize document processor
     document_processor = DocumentProcessor(
@@ -60,6 +63,9 @@ async def startup_event():
         openai_api_key=settings.openai_api_key,
         model_name=settings.llm_model
     )
+    
+    # Initialize mock test engine
+    mock_test_engine = MockTestEngine(vector_store_manager)
     
     print("ScholarAI RAG API initialized successfully!")
 
@@ -129,6 +135,8 @@ async def get_available_filters():
         return FiltersResponse(**filters)
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
+
+@app.post("/search", response_model=SearchResponse)
 async def search_documents(request: SearchRequest):
     """Search for relevant documents"""
     try:
@@ -145,7 +153,7 @@ async def search_documents(request: SearchRequest):
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
-@app.post("/search", response_model=SearchResponse)
+@app.post("/upload", response_model=DocumentUploadResponse)
 async def upload_documents(files: List[UploadFile] = File(...)):
     """Upload and process documents"""
     try:
@@ -206,8 +214,62 @@ async def reset_vector_store():
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
-@app.get("/stats")
-async def get_stats():
+# Mock Test Endpoints
+@app.post("/test/generate")
+async def generate_test(request: TestGenerateRequest):
+    """Generate a new mock test"""
+    try:
+        test_data = mock_test_engine.generate_test(
+            subject=request.subject,
+            difficulty=request.difficulty,
+            num_questions=request.num_questions
+        )
+        return test_data
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.post("/test/submit", response_model=TestResult)
+async def submit_test(request: TestSubmitRequest):
+    """Submit test answers and get results"""
+    try:
+        result = mock_test_engine.submit_test(
+            test_id=request.test_id,
+            student_id=request.student_id,
+            answers=request.answers,
+            time_taken=request.time_taken
+        )
+        return result
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.get("/test/performance/{student_id}")
+async def get_performance(student_id: str):
+    """Get student performance analytics"""
+    try:
+        performance = mock_test_engine.get_student_performance(student_id)
+        return performance
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+# Mobile-friendly endpoints
+@app.post("/mobile/chat")
+async def mobile_chat(request: MobileQueryRequest):
+    """Mobile-optimized chat interface"""
+    try:
+        result = rag_engine.query(request.message, max_docs=3)
+        
+        # Mobile-optimized response
+        return {
+            "response": result["answer"],
+            "sources_count": len(result["sources"]),
+            "confidence": result["confidence"],
+            "sources": [{
+                "title": s["file_name"],
+                "type": s.get("document_type", "document")
+            } for s in result["sources"][:2]]  # Limit for mobile
+        }
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
     """Get system statistics"""
     return {
         "total_documents": vector_store_manager.get_collection_count(),
@@ -216,7 +278,8 @@ async def get_stats():
         "model": settings.llm_model
     }
 
-if __name__ == "__main__":
+@app.get("/stats")
+async def get_stats():
     import uvicorn
     uvicorn.run(
         "src.api.main:app",

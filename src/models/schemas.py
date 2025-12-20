@@ -1,5 +1,6 @@
 from pydantic import BaseModel, Field
 from typing import List, Optional, Dict
+from datetime import datetime
 
 class QueryRequest(BaseModel):
     question: str = Field(..., description="Student's question")
@@ -15,6 +16,28 @@ class FilteredQueryRequest(BaseModel):
     difficulty: Optional[str] = Field(None, description="Filter by: easy, medium, hard")
     year: Optional[str] = Field(None, description="Filter by year")
     max_docs: int = Field(default=5, description="Maximum number of documents to retrieve")
+
+# Mock Test Models
+class TestGenerateRequest(BaseModel):
+    subject: Optional[str] = None
+    difficulty: Optional[str] = None
+    num_questions: int = Field(default=10, ge=1, le=50)
+
+class TestSubmitRequest(BaseModel):
+    test_id: str
+    student_id: str
+    answers: List[int]
+    time_taken: int
+
+class TestResult(BaseModel):
+    test_id: str
+    student_id: str
+    score: float
+    total_questions: int
+    correct_answers: int
+    time_taken: int
+    subject_scores: Dict
+    timestamp: datetime
 
 class SourceInfo(BaseModel):
     file_name: str
@@ -64,3 +87,9 @@ class FiltersResponse(BaseModel):
     subjects: List[str]
     difficulties: List[str]
     years: List[str]
+
+# Mobile UI Models
+class MobileQueryRequest(BaseModel):
+    message: str
+    student_id: Optional[str] = None
+    context: Optional[str] = None
