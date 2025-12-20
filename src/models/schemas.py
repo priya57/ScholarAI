@@ -77,9 +77,12 @@ class SearchResult(BaseModel):
     metadata: Dict
     relevance_score: float
 
-class SearchResponse(BaseModel):
-    results: List[SearchResult]
-    total_results: int
+# Mobile UI Models
+class MobileQueryRequest(BaseModel):
+    message: str
+    student_id: Optional[str] = None
+    context: Optional[str] = None
+    user_role: Optional[str] = Field(default="student", description="User role for personalized experience")
 
 class FiltersResponse(BaseModel):
     document_types: List[str]
@@ -88,8 +91,14 @@ class FiltersResponse(BaseModel):
     difficulties: List[str]
     years: List[str]
 
-# Mobile UI Models
-class MobileQueryRequest(BaseModel):
-    message: str
-    student_id: Optional[str] = None
-    context: Optional[str] = None
+# User role models
+class UserRole(BaseModel):
+    user_id: str
+    role: str = Field(..., description="Role: student, faculty, admin")
+    permissions: List[str] = Field(default=[], description="Specific permissions")
+
+class AdminUploadRequest(BaseModel):
+    admin_id: str
+    content_type: str = Field(..., description="Type: exam, competitive, placement, curriculum")
+    target_audience: str = Field(..., description="Audience: college, school, general")
+    metadata: Optional[Dict] = None
