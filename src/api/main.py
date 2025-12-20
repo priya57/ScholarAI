@@ -251,8 +251,76 @@ async def get_performance(student_id: str):
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
-# Mobile-friendly endpoints
-@app.post("/mobile/chat")
+# Document preview and download endpoints
+@app.get("/document/preview/{file_id}")
+async def preview_document(file_id: str):
+    """Preview document content"""
+    try:
+        # Get document by ID from vector store
+        docs = vector_store_manager.similarity_search(file_id, k=1)
+        if not docs:
+            raise HTTPException(status_code=404, detail="Document not found")
+        
+        doc = docs[0]
+        return {
+            "file_name": doc.metadata.get("file_name", "Unknown"),
+            "document_type": doc.metadata.get("document_type"),
+            "subject": doc.metadata.get("subject"),
+            "company": doc.metadata.get("company"),
+            "year": doc.metadata.get("year"),
+            "difficulty": doc.metadata.get("difficulty"),
+            "content_preview": doc.page_content[:1000] + "..." if len(doc.page_content) > 1000 else doc.page_content
+        }
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.get("/document/download/{file_path:path}")
+async def download_document(file_path: str):
+    """Secure document download"""
+    from fastapi.responses import FileResponse
+    import os
+    
+    # Security check - ensure file is in allowed directory
+    if not os.path.exists(file_path) or ".." in file_path:
+        raise HTTPException(status_code=404, detail="File not found or access denied")
+    
+    return FileResponse(file_path, filename=os.path.basename(file_path))
+
+# AI Search Assistant endpoint
+@app.post("/search/assistant")
+async def ai_search_assistant(request: SearchRequest):
+    """AI Search Assistant with keyword-based queries"""
+    try:
+        # Get relevant documents
+        docs_with_scores = vector_store_manager.similarity_search_with_score(
+            request.query, k=request.k
+        )
+        
+        # Format for search assistant
+        results = []
+        for doc, score in docs_with_scores:
+            result = {
+                "title": doc.metadata.get("file_name", "Unknown"),
+                "content_preview": doc.page_content[:200] + "...",
+                "document_type": doc.metadata.get("document_type"),
+                "subject": doc.metadata.get("subject"),
+                "company": doc.metadata.get("company"),
+                "year": doc.metadata.get("year"),
+                "difficulty": doc.metadata.get("difficulty"),
+                "relevance_score": float(score),
+                "source_path": doc.metadata.get("source")
+            }
+            results.append(result)
+        
+        return {
+            "query": request.query,
+            "total_results": len(results),
+            "results": results,
+            "search_type": "keyword_based"
+        }
+    
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
 async def mobile_chat(request: MobileQueryRequest):
     """Mobile-optimized chat interface"""
     try:
@@ -278,8 +346,8 @@ async def mobile_chat(request: MobileQueryRequest):
         "model": settings.llm_model
     }
 
-@app.get("/stats")
-async def get_stats():
+# Mobile-friendly endpoints
+@app.post("/mobile/chat")
     import uvicorn
     uvicorn.run(
         "src.api.main:app",

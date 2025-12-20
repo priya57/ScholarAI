@@ -150,7 +150,7 @@ class MockTestEngine:
         return result
     
     def get_student_performance(self, student_id: str) -> Dict:
-        """Get student's overall performance analytics"""
+        """Get student's overall performance analytics with recommendations"""
         student_tests = [r for r in self.test_results.values() if r.student_id == student_id]
         
         if not student_tests:
@@ -161,6 +161,8 @@ class MockTestEngine:
         
         # Subject-wise performance
         subject_performance = {}
+        weak_subjects = []
+        
         for test in student_tests:
             for subject, scores in test.subject_scores.items():
                 if subject not in subject_performance:
@@ -168,14 +170,28 @@ class MockTestEngine:
                 subject_performance[subject]["scores"].append(scores["score"])
                 subject_performance[subject]["total_questions"] += scores["total"]
         
+        # Generate recommendations
+        recommendations = []
         for subject in subject_performance:
             scores = subject_performance[subject]["scores"]
-            subject_performance[subject]["average"] = sum(scores) / len(scores)
+            avg = sum(scores) / len(scores)
+            subject_performance[subject]["average"] = avg
+            
+            if avg < 60:
+                weak_subjects.append(subject)
+                recommendations.append(f"Focus on {subject} - current average: {avg:.1f}%")
+        
+        if avg_score > 80:
+            recommendations.append("Great performance! Try harder difficulty levels")
+        elif avg_score < 50:
+            recommendations.append("Review fundamentals and take more practice tests")
         
         return {
             "student_id": student_id,
             "total_tests": total_tests,
             "average_score": round(avg_score, 2),
             "subject_performance": subject_performance,
+            "weak_subjects": weak_subjects,
+            "recommendations": recommendations,
             "recent_tests": [asdict(t) for t in sorted(student_tests, key=lambda x: x.timestamp, reverse=True)[:5]]
         }

@@ -39,6 +39,7 @@
             <button class="filter-btn" onclick="setFilter('mock_test')">Tests</button>
             <button class="filter-btn" onclick="setFilter('placement_paper')">Placement</button>
             <button class="filter-btn" onclick="startTest()">Take Test</button>
+            <button class="filter-btn" onclick="showSearch()">AI Search</button>
         </div>
         
         <div class="chat-container" id="chatContainer">
@@ -160,7 +161,49 @@
             container.scrollTop = container.scrollHeight;
         }
         
-        async function submitTest(testId, numQuestions) {
+        async function showSearch() {
+            const query = prompt('Enter search keywords:');
+            if (!query) return;
+            
+            try {
+                const response = await fetch(API_BASE + '/search/assistant', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ query: query, k: 5 })
+                });
+                
+                const data = await response.json();
+                displaySearchResults(data);
+            } catch (error) {
+                addMessage('Search failed. Please try again.', 'bot');
+            }
+        }
+        
+        function displaySearchResults(data) {
+            const container = document.getElementById('chatContainer');
+            const resultsDiv = document.createElement('div');
+            resultsDiv.className = 'test-section';
+            
+            let resultsHtml = `<h3>Search Results (${data.total_results})</h3>`;
+            
+            data.results.forEach(result => {
+                resultsHtml += `
+                    <div style="border: 1px solid #e5e7eb; padding: 1rem; margin: 0.5rem 0; border-radius: 8px;">
+                        <h4>${result.title}</h4>
+                        <p>${result.content_preview}</p>
+                        <div style="font-size: 0.8rem; color: #6b7280;">
+                            Type: ${result.document_type || 'N/A'} | 
+                            Subject: ${result.subject || 'N/A'} | 
+                            Score: ${(result.relevance_score * 100).toFixed(1)}%
+                        </div>
+                    </div>
+                `;
+            });
+            
+            resultsDiv.innerHTML = resultsHtml;
+            container.appendChild(resultsDiv);
+            container.scrollTop = container.scrollHeight;
+        }
             const answers = [];
             for (let i = 0; i < numQuestions; i++) {
                 const selected = document.querySelector(`input[name="q${i}"]:checked`);
