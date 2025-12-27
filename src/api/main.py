@@ -52,8 +52,7 @@ async def startup_event():
     
     # Initialize vector store
     vector_store_manager = VectorStoreManager(
-        persist_directory=settings.chroma_persist_directory,
-        collection_name=settings.collection_name,
+        database_url=settings.database_url,
         openai_api_key=settings.openai_api_key
     )
     

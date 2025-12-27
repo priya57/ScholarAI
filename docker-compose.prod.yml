@@ -1,0 +1,231 @@
+version: '3.8'
+
+services:
+  nginx:
+    image: nginx:alpine
+    container_name: scholarai-nginx-prod
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./nginx/nginx.conf:/etc/nginx/nginx.conf:ro
+      - ./nginx/ssl:/etc/nginx/ssl:ro
+      - ./nginx/logs:/var/log/nginx
+    depends_on:
+      - scholarai-api
+    restart: unless-stopped
+    networks:
+      - scholarai-prod
+
+  scholarai-api:
+    build: .
+    environment:
+      - OPENAI_API_KEY=${OPENAI_API_KEY}
+      - ENVIRONMENT=production
+      - REDIS_URL=redis://redis-master:6379/0
+      - DATABASE_URL=postgresql://${DB_USER:-scholarai_prod}:${DB_PASSWORD}@postgres:5432/scholarai
+      - VECTOR_DB_URL=http://qdrant:6333
+      - VECTOR_DB_TYPE=qdrant
+      - MINIO_ENDPOINT=minio:9000
+      - MINIO_ACCESS_KEY=${MINIO_USER:-scholarai_admin}
+      - MINIO_SECRET_KEY=${MINIO_PASSWORD}
+    volumes:
+      - ./data:/app/data:ro
+      - ./logs:/app/logs
+    depends_on:
+      - postgres
+      - redis-master
+      - qdrant
+      - minio
+    restart: unless-stopped
+    networks:
+      - scholarai-prod
+    deploy:
+      replicas: 3
+      resources:
+        limits:
+          memory: 2G
+          cpus: '1.0'
+        reservations:
+          memory: 1G
+          cpus: '0.5'
+
+  postgres:
+    image: postgres:15
+    container_name: scholarai-postgres-prod
+    environment:
+      - POSTGRES_DB=scholarai
+      - POSTGRES_USER=${DB_USER:-scholarai_prod}
+      - POSTGRES_PASSWORD=${DB_PASSWORD}
+      - POSTGRES_INITDB_ARGS=--encoding=UTF-8 --lc-collate=C --lc-ctype=C
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+      - ./backups:/backups
+      - ./config/init.sql:/docker-entrypoint-initdb.d/init.sql
+    ports:
+      - "5432:5432"
+    restart: unless-stopped
+    networks:
+      - scholarai-prod
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${DB_USER:-scholarai_prod}"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+  redis-master:
+    image: redis:7-alpine
+    container_name: scholarai-redis-master
+    command: redis-server --appendonly yes --replica-announce-ip redis-master
+    volumes:
+      - redis-master-data:/data
+    ports:
+      - "6379:6379"
+    restart: unless-stopped
+    networks:
+      - scholarai-prod
+
+  redis-replica:
+    image: redis:7-alpine
+    container_name: scholarai-redis-replica
+    command: redis-server --replicaof redis-master 6379
+    depends_on:
+      - redis-master
+    volumes:
+      - redis-replica-data:/data
+    restart: unless-stopped
+    networks:
+      - scholarai-prod
+
+  qdrant:
+    image: qdrant/qdrant:latest
+    container_name: scholarai-qdrant-prod
+    ports:
+      - "6333:6333"
+      - "6334:6334"
+    volumes:
+      - qdrant-data:/qdrant/storage
+    environment:
+      - QDRANT__SERVICE__HTTP_PORT=6333
+      - QDRANT__SERVICE__GRPC_PORT=6334
+    restart: unless-stopped
+    networks:
+      - scholarai-prod
+
+  minio:
+    image: minio/minio:latest
+    container_name: scholarai-minio-prod
+    ports:
+      - "9000:9000"
+      - "9001:9001"
+    environment:
+      - MINIO_ROOT_USER=${MINIO_USER:-scholarai_admin}
+      - MINIO_ROOT_PASSWORD=${MINIO_PASSWORD}
+    volumes:
+      - minio-data:/data
+    command: server /data --console-address ":9001"
+    restart: unless-stopped
+    networks:
+      - scholarai-prod
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:9000/minio/health/live"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+  prometheus:
+    image: prom/prometheus:latest
+    container_name: scholarai-prometheus
+    ports:
+      - "9090:9090"
+    volumes:
+      - ./monitoring/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - prometheus-data:/prometheus
+    command:
+      - '--config.file=/etc/prometheus/prometheus.yml'
+      - '--storage.tsdb.path=/prometheus'
+      - '--web.console.libraries=/etc/prometheus/console_libraries'
+      - '--web.console.templates=/etc/prometheus/consoles'
+      - '--storage.tsdb.retention.time=200h'
+      - '--web.enable-lifecycle'
+    restart: unless-stopped
+    networks:
+      - scholarai-prod
+
+  grafana:
+    image: grafana/grafana:latest
+    container_name: scholarai-grafana
+    ports:
+      - "3000:3000"
+    environment:
+      - GF_SECURITY_ADMIN_USER=admin
+      - GF_SECURITY_ADMIN_PASSWORD=${GRAFANA_PASSWORD}
+      - GF_USERS_ALLOW_SIGN_UP=false
+    volumes:
+      - grafana-data:/var/lib/grafana
+      - ./monitoring/grafana/provisioning:/etc/grafana/provisioning
+    depends_on:
+      - prometheus
+    restart: unless-stopped
+    networks:
+      - scholarai-prod
+
+  loki:
+    image: grafana/loki:latest
+    container_name: scholarai-loki
+    ports:
+      - "3100:3100"
+    volumes:
+      - loki-data:/loki
+      - ./monitoring/loki-config.yml:/etc/loki/local-config.yaml
+    command: -config.file=/etc/loki/local-config.yaml
+    restart: unless-stopped
+    networks:
+      - scholarai-prod
+
+  promtail:
+    image: grafana/promtail:latest
+    container_name: scholarai-promtail
+    volumes:
+      - ./logs:/var/log/scholarai:ro
+      - ./monitoring/promtail-config.yml:/etc/promtail/config.yml
+    command: -config.file=/etc/promtail/config.yml
+    depends_on:
+      - loki
+    restart: unless-stopped
+    networks:
+      - scholarai-prod
+
+  # Health check service
+  healthcheck:
+    image: curlimages/curl:latest
+    container_name: scholarai-healthcheck
+    command: >
+      sh -c "
+        while true; do
+          curl -f http://scholarai-api:8000/health || exit 1
+          sleep 30
+        done
+      "
+    depends_on:
+      - scholarai-api
+    restart: unless-stopped
+    networks:
+      - scholarai-prod
+
+volumes:
+  postgres-data:
+  redis-master-data:
+  redis-replica-data:
+  qdrant-data:
+  minio-data:
+  prometheus-data:
+  grafana-data:
+  loki-data:
+
+networks:
+  scholarai-prod:
+    driver: bridge
+    ipam:
+      config:
+        - subnet: 172.20.0.0/16

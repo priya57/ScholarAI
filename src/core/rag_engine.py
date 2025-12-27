@@ -37,16 +37,19 @@ Instructions:
 Answer:"""
         )
         
-        # Initialize retrieval chain
-        self.qa_chain = RetrievalQA.from_chain_type(
-            llm=self.llm,
-            chain_type="stuff",
-            retriever=self.vector_store_manager.vector_store.as_retriever(
-                search_kwargs={"k": 5}
-            ),
-            chain_type_kwargs={"prompt": self.prompt_template},
-            return_source_documents=True
-        )
+        # Initialize retrieval chain only if vector store exists
+        if self.vector_store_manager.vector_store is not None:
+            self.qa_chain = RetrievalQA.from_chain_type(
+                llm=self.llm,
+                chain_type="stuff",
+                retriever=self.vector_store_manager.vector_store.as_retriever(
+                    search_kwargs={"k": 5}
+                ),
+                chain_type_kwargs={"prompt": self.prompt_template},
+                return_source_documents=True
+            )
+        else:
+            self.qa_chain = None
     
     def query_with_docs(self, question: str, docs: List) -> Dict:
         """Query with pre-filtered documents"""
@@ -103,6 +106,14 @@ Answer:"""
     def query(self, question: str, max_docs: int = 5) -> Dict:
         """Process a query and return response with sources"""
         try:
+            if self.qa_chain is None:
+                return {
+                    "answer": "No documents have been uploaded yet. Please upload some documents first.",
+                    "sources": [],
+                    "confidence": "low",
+                    "total_sources_found": 0
+                }
+            
             # Update retriever with max_docs
             self.qa_chain.retriever.search_kwargs = {"k": max_docs}
             

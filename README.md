@@ -46,60 +46,87 @@ CHUNK_OVERLAP=200
 
 ## 🚀 Quick Start
 
-### 1. Ingest Documents
+### Development Environment (5 Core Services)
 
 ```bash
-# Using CLI
-python cli.py ingest /path/to/your/documents
+# Windows
+scripts\setup-dev.bat
 
-# Using API (after starting server)
-curl -X POST "http://localhost:8000/upload" \
-  -F "files=@document1.pdf" \
-  -F "files=@document2.docx"
+# Linux/Mac
+scripts/setup-dev.sh
 ```
 
-### 2. Start API Server
+**Available Services:**
+- ScholarAI API: http://localhost:8000
+- ChromaDB: http://localhost:8001
+- PostgreSQL: localhost:5432
+- Redis: localhost:6379
+- Adminer (DB UI): http://localhost:8080
+
+### Production Environment (12 Services for Scale)
 
 ```bash
-# Development
-python -m uvicorn src.api.main:app --reload
+# Set required environment variables
+export OPENAI_API_KEY=your_key
+export DB_PASSWORD=secure_password
+export GRAFANA_PASSWORD=admin_password
 
-# Production
-python -m uvicorn src.api.main:app --host 0.0.0.0 --port 8000 --workers 4
+# Windows
+scripts\setup-prod.bat
+
+# Linux/Mac
+scripts/setup-prod.sh
 ```
 
-### 3. Query the System
-
-```bash
-# Using CLI
-python cli.py query "What are the key concepts in machine learning?"
-
-# Using API
-curl -X POST "http://localhost:8000/query" \
-  -H "Content-Type: application/json" \
-  -d '{"question": "What are the key concepts in machine learning?"}'
-```
+**Available Services:**
+- ScholarAI API (Load Balanced): http://localhost
+- Grafana Dashboard: http://localhost:3000
+- Prometheus Metrics: http://localhost:9090
+- MinIO Console: http://localhost:9001
+- Qdrant Dashboard: http://localhost:6333/dashboard
 
 ## 🐳 Docker Deployment
 
-### Development
+### Development (5 Services)
 
 ```bash
-docker build -t scholarai .
-docker run -p 8000:8000 -e OPENAI_API_KEY=your_key scholarai
+# Quick setup
+scripts/setup-dev.bat  # Windows
+scripts/setup-dev.sh   # Linux/Mac
+
+# Manual setup
+docker-compose -f docker-compose.dev.yml up -d
 ```
 
-### Production
+### Production (12 Services)
 
 ```bash
 # Set environment variables
-export OPENAI_API_KEY=your_openai_api_key
+export OPENAI_API_KEY=your_key
+export DB_PASSWORD=secure_password
+export GRAFANA_PASSWORD=admin_password
 
-# Start all services
-docker-compose up -d
+# Quick setup
+scripts/setup-prod.bat  # Windows
+scripts/setup-prod.sh   # Linux/Mac
 
-# Check status
-docker-compose ps
+# Manual setup
+docker-compose -f docker-compose.prod.yml up -d
+
+# Scale API instances
+docker-compose -f docker-compose.prod.yml up -d --scale scholarai-api=5
+```
+
+### Health Monitoring
+
+```bash
+# Check all services
+scripts/health-check.bat      # Windows
+scripts/health-check.sh       # Linux/Mac
+
+# Development services only
+scripts/health-check.bat dev  # Windows
+scripts/health-check.sh dev   # Linux/Mac
 ```
 
 ## 📚 API Endpoints
@@ -143,6 +170,34 @@ python cli.py stats
 python cli.py reset
 ```
 
+## 🛠️ Management Scripts
+
+### Setup Scripts
+```bash
+# Development environment
+scripts/setup-dev.bat    # Windows
+scripts/setup-dev.sh     # Linux/Mac
+
+# Production environment
+scripts/setup-prod.bat   # Windows
+scripts/setup-prod.sh    # Linux/Mac
+```
+
+### Monitoring Scripts
+```bash
+# Health checks
+scripts/health-check.bat [dev]  # Windows
+scripts/health-check.sh [dev]   # Linux/Mac
+
+# Scaling (production only)
+scripts/scale.bat 5      # Windows - scale to 5 instances
+scripts/scale.sh 5       # Linux/Mac - scale to 5 instances
+
+# Backup (production only)
+scripts/backup.bat       # Windows
+scripts/backup.sh        # Linux/Mac
+```
+
 ## 📊 System Architecture
 
 ```
@@ -172,26 +227,41 @@ python cli.py reset
 
 ## 📈 Scaling for 40,000+ Students
 
-### Performance Optimizations
+### Infrastructure Costs (Monthly)
 
-1. **Horizontal Scaling**: Use multiple API instances behind a load balancer
-2. **Caching**: Redis for frequently asked questions
-3. **Database**: Consider PostgreSQL with pgvector for larger datasets
-4. **CDN**: Cache static responses and documents
+**Development Environment**
+- Vector DB: Free (Qdrant/Pinecone starter)
+- Hosting: $20-50/month
+- Database: Free (SQLite/Supabase free tier)
+- **Total: $20-50/month**
 
-### Recommended Production Setup
+**Production Environment (40K+ students)**
+- Vector DB: $70-100/month (Pinecone Standard)
+- Hosting: $100-300/month (AWS/Azure/GCP)
+- Database: $50-200/month (PostgreSQL)
+- Caching: $30-100/month (Redis)
+- Storage: $20-75/month (S3/MinIO)
+- CDN: $20-100/month (CloudFlare)
+- Monitoring: $50-200/month (Grafana/Prometheus)
+- OpenAI API: $500-2000/month (usage-based)
+- **Total: $840-3075/month**
 
-```yaml
-# docker-compose.prod.yml
-services:
-  scholarai-api:
-    deploy:
-      replicas: 4
-    resources:
-      limits:
-        memory: 2G
-        cpus: '1.0'
-```
+### Scaling Strategy
+
+**Phase 1: MVP (0-1K users)**
+- ChromaDB + SQLite
+- Single server deployment
+- Cost: $20-50/month
+
+**Phase 2: Growth (1K-10K users)**
+- Qdrant Cloud + PostgreSQL
+- Load balancer + 2 servers
+- Cost: $200-500/month
+
+**Phase 3: Scale (10K-40K+ users)**
+- Pinecone + Multi-region deployment
+- Auto-scaling + CDN
+- Cost: $800-3000/month
 
 ## 🛠️ Customization
 

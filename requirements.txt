@@ -4,12 +4,15 @@ langchain==0.1.20
 langchain-openai==0.1.8
 langchain-community==0.0.38
 langchain-core==0.1.52
-chromadb==0.4.22
+chromadb==0.4.15
 sentence-transformers==2.2.2
 pypdf2==3.0.1
 python-docx==1.1.0
 python-multipart==0.0.6
 pydantic==2.5.0
+pydantic-settings==2.0.3
 python-dotenv==1.0.0
 redis==5.0.1
-celery==5.3.4
+psycopg2-binary==2.9.7
+sqlalchemy==2.0.23
+alembic==1.12.1
