@@ -4,8 +4,28 @@ from typing import List, Dict, Optional
 from pathlib import Path
 import PyPDF2
 from docx import Document
-from langchain.text_splitter import RecursiveCharacterTextSplitter
-from langchain.schema import Document as LangchainDocument
+from langchain_text_splitters import RecursiveCharacterTextSplitter
+from langchain_core.documents import Document as LangchainDocument
+
+# Optional imports with fallbacks
+try:
+    from striprtf.striprtf import rtf_to_text
+    RTF_AVAILABLE = True
+except ImportError:
+    RTF_AVAILABLE = False
+
+try:
+    import docx2txt
+    DOC_AVAILABLE = True
+except ImportError:
+    DOC_AVAILABLE = False
+
+try:
+    from PIL import Image
+    import pytesseract
+    OCR_AVAILABLE = True
+except ImportError:
+    OCR_AVAILABLE = False
 
 class DocumentProcessor:
     def __init__(self, chunk_size: int = 1000, chunk_overlap: int = 200):
@@ -24,18 +44,19 @@ class DocumentProcessor:
             "file_type": Path(file_path).suffix.lower(),
         }
         
-        # Detect document type
-        if any(term in file_name for term in ['mock', 'test', 'exam', 'quiz']):
-            metadata["document_type"] = "mock_test"
-        elif any(term in file_name for term in ['placement', 'interview', 'company']):
+        # Detect document type - files in company folders are placement papers
+        if any(company in str(Path(file_path).parent).lower() for company in ['cocubes', 'mphasis', 'valuelabs', 'zenq']):
             metadata["document_type"] = "placement_paper"
+        elif any(term in file_name for term in ['mock', 'test', 'exam', 'quiz']):
+            metadata["document_type"] = "mock_test"
         else:
             metadata["document_type"] = "learning_material"
         
-        # Extract company names for placement papers
-        companies = ['google', 'microsoft', 'amazon', 'apple', 'meta', 'netflix', 'uber', 'airbnb']
+        # Extract company names from folder path and filename
+        folder_path = str(Path(file_path).parent).lower()
+        companies = ['cocubes', 'mphasis', 'valuelabs', 'zenq', 'google', 'microsoft', 'amazon', 'apple', 'meta', 'netflix', 'uber', 'airbnb']
         for company in companies:
-            if company in file_name:
+            if company in folder_path or company in file_name:
                 metadata["company"] = company.title()
                 break
         
@@ -44,11 +65,16 @@ class DocumentProcessor:
         if year_match:
             metadata["year"] = year_match.group()
         
-        # Extract subject/topic
-        subjects = ['python', 'java', 'javascript', 'sql', 'algorithms', 'data structures', 'machine learning', 'ai']
-        for subject in subjects:
-            if subject.replace(' ', '') in file_name.replace(' ', ''):
-                metadata["subject"] = subject.title()
+        # Extract subject/topic from placement papers
+        subjects = {
+            'quant': 'Quantitative Aptitude', 'logical': 'Logical Reasoning', 'english': 'English',
+            'computer': 'Computer Fundamentals', 'reasoning': 'Reasoning', 'verbal': 'Verbal Ability',
+            'python': 'Python', 'java': 'Java', 'javascript': 'JavaScript', 'sql': 'SQL',
+            'algorithms': 'Algorithms', 'data structures': 'Data Structures'
+        }
+        for key, subject in subjects.items():
+            if key.replace(' ', '') in file_name.replace(' ', ''):
+                metadata["subject"] = subject
                 break
         
         # Extract difficulty
@@ -77,6 +103,29 @@ class DocumentProcessor:
         with open(file_path, 'r', encoding='utf-8') as file:
             return file.read()
     
+    def extract_text_from_rtf(self, file_path: str) -> str:
+        if not RTF_AVAILABLE:
+            return f"[RTF file: {Path(file_path).name} - striprtf not available]"
+        with open(file_path, 'r', encoding='utf-8') as file:
+            rtf_content = file.read()
+            return rtf_to_text(rtf_content)
+    
+    def extract_text_from_doc(self, file_path: str) -> str:
+        if not DOC_AVAILABLE:
+            return f"[DOC file: {Path(file_path).name} - docx2txt not available]"
+        return docx2txt.process(file_path)
+    
+    def extract_text_from_image(self, file_path: str) -> str:
+        if not OCR_AVAILABLE:
+            return f"[Image file: {Path(file_path).name} - OCR not available]"
+        try:
+            image = Image.open(file_path)
+            text = pytesseract.image_to_string(image)
+            return text
+        except Exception as e:
+            print(f"OCR failed for {file_path}: {e}")
+            return f"[Image file: {Path(file_path).name} - OCR failed]"
+    
     def process_document(self, file_path: str) -> List[LangchainDocument]:
         file_extension = Path(file_path).suffix.lower()
         
@@ -86,6 +135,12 @@ class DocumentProcessor:
             text = self.extract_text_from_docx(file_path)
         elif file_extension == '.txt':
             text = self.extract_text_from_txt(file_path)
+        elif file_extension == '.rtf':
+            text = self.extract_text_from_rtf(file_path)
+        elif file_extension == '.doc':
+            text = self.extract_text_from_doc(file_path)
+        elif file_extension in ['.jpg', '.jpeg', '.png', '.bmp', '.tiff']:
+            text = self.extract_text_from_image(file_path)
         else:
             raise ValueError(f"Unsupported file format: {file_extension}")
         
@@ -104,7 +159,7 @@ class DocumentProcessor:
     
     def process_directory(self, directory_path: str) -> List[LangchainDocument]:
         all_documents = []
-        supported_extensions = ['.pdf', '.docx', '.txt']
+        supported_extensions = ['.pdf', '.docx', '.txt', '.rtf', '.doc', '.jpg', '.jpeg', '.png', '.bmp', '.tiff']
         
         for root, dirs, files in os.walk(directory_path):
             for file in files:

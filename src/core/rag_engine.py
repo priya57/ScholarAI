@@ -1,5 +1,7 @@
-from langchain.llms import OpenAI
-from langchain.chat_models import ChatOpenAI
+try:
+    from langchain_openai import ChatOpenAI
+except ImportError:
+    from langchain.chat_models import ChatOpenAI
 from langchain.chains import RetrievalQA
 from langchain.prompts import PromptTemplate
 from typing import Dict, List, Optional

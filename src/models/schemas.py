@@ -77,6 +77,11 @@ class SearchResult(BaseModel):
     metadata: Dict
     relevance_score: float
 
+class SearchResponse(BaseModel):
+    results: List[SearchResult]
+    total_results: int
+    query: Optional[str] = None
+
 # Mobile UI Models
 class MobileQueryRequest(BaseModel):
     message: str

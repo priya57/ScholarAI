@@ -1,15 +1,34 @@
+# Python
 __pycache__/
 *.pyc
 *.pyo
 *.pyd
 .Python
+
+# Virtual environments
 env/
 venv/
 .venv/
+scholarai_env/
+scholarai_env/Lib/
+**/site-packages/
+**/Lib/
+**/Scripts/
+**/Include/
+pyvenv.cfg
+
+# Environment variables
 .env
+
+# Data and generated files
 data/
+processed_data/
+chroma_db/
+chroma_db_new/
 logs/
 *.log
+
+# IDE
 .DS_Store
 .vscode/
 .idea/

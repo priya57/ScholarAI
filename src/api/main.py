@@ -271,6 +271,8 @@ async def preview_document(file_id: str):
             "difficulty": doc.metadata.get("difficulty"),
             "content_preview": doc.page_content[:1000] + "..." if len(doc.page_content) > 1000 else doc.page_content
         }
+    except HTTPException:
+        raise  # Re-raise HTTPExceptions as-is
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
@@ -321,6 +323,8 @@ async def ai_search_assistant(request: SearchRequest):
     
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
+# Mobile-friendly endpoints
+@app.post("/mobile/chat")
 async def mobile_chat(request: MobileQueryRequest):
     """Mobile-optimized chat interface"""
     try:
@@ -338,6 +342,9 @@ async def mobile_chat(request: MobileQueryRequest):
         }
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
+
+@app.get("/stats")
+async def get_stats():
     """Get system statistics"""
     return {
         "total_documents": vector_store_manager.get_collection_count(),
@@ -346,8 +353,7 @@ async def mobile_chat(request: MobileQueryRequest):
         "model": settings.llm_model
     }
 
-# Mobile-friendly endpoints
-@app.post("/mobile/chat")
+if __name__ == "__main__":
     import uvicorn
     uvicorn.run(
         "src.api.main:app",
